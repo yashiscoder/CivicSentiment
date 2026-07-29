@@ -3,8 +3,11 @@
  * Strictly integrated with FastAPI Backend API (mmodel_logistic_2.pkl & vectorizer_for_m2.pkl)
  */
 
-const API_ENDPOINT = "http://127.0.0.1:5000/api/analyze";
-const API_HEALTH_ENDPOINT = "http://127.0.0.1:5000/api/health";
+const API_ENDPOINT =
+"https://civicsentiment.onrender.com/api/analyze";
+
+const API_HEALTH_ENDPOINT =
+"https://civicsentiment.onrender.com/api/health";
 
 // Initial Seed Data for History
 const INITIAL_HISTORY = [
