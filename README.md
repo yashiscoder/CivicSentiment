@@ -1,24 +1,66 @@
 # 🚀 CivicSentiment
 
-CivicSentiment is a machine learning-powered web application that performs real-time sentiment analysis on text. It uses a trained Logistic Regression model to classify user input into **Positive**, **Negative**, **Neutral**, or **Irrelevant** sentiments while displaying prediction confidence and probability distribution through an interactive dashboard.
+**CivicSentiment** is an end-to-end sentiment analysis project built with Machine Learning and FastAPI. It includes data preprocessing, feature engineering, model training using Logistic Regression, and deployment through an interactive web application that classifies text into Positive, Negative, Neutral, and Irrelevant sentiments in real time.
 
 ---
 
-## 📌 Features
+## 📖 Overview
 
-- 🔍 Real-time sentiment prediction
-- 🤖 Custom-trained Logistic Regression model
-- 📊 Confidence score and probability visualization
-- 📈 Positive, Neutral, Negative & Irrelevant classification
-- 📝 Analysis history with search and filtering
-- 📂 Export history as CSV
-- 🌐 REST API built with FastAPI
+**CivicSentiment** is an end-to-end Machine Learning and Web Application project for real-time sentiment analysis. It predicts whether a given text is **Positive**, **Negative**, **Neutral**, or **Irrelevant** using a trained **Logistic Regression** model.
+
+The project covers the complete ML lifecycle—from data preprocessing and model training in Jupyter Notebook to deployment with FastAPI and an interactive frontend.
+
+---
+
+## ✨ Features
+
+- 🤖 Real-time sentiment prediction
+- 📊 Confidence score and probability distribution
+- 🧠 Custom-trained Logistic Regression model
+- 📝 Analysis history with search & filtering
+- 📤 Export analysis history as CSV
+- 🌐 REST API using FastAPI
 - 🎨 Modern Glassmorphism UI
-- ⚡ Fast and lightweight inference
+- ⚡ Lightweight and fast inference
 
 ---
 
-## 🛠️ Tech Stack
+# 🧠 Machine Learning Pipeline
+
+The project includes a complete training notebook (**Sentiment_Analysis.ipynb**) covering:
+
+- Data Cleaning
+- Text Preprocessing
+- Tokenization
+- Stopword Removal
+- Bag of Words (CountVectorizer)
+- N-Gram Feature Engineering (1–4 grams)
+- Logistic Regression Training
+- Hyperparameter Tuning
+- Model Evaluation
+- Model Serialization (.pkl)
+- Comparison with XGBoost
+
+> **Final deployed model:** Logistic Regression
+
+---
+
+## 🛠 Tech Stack
+
+### Machine Learning
+- Python
+- Scikit-learn
+- Logistic Regression
+- CountVectorizer (Bag of Words)
+- NLTK
+- Pandas
+- NumPy
+- Matplotlib
+- Seaborn
+
+### Backend
+- FastAPI
+- Uvicorn
 
 ### Frontend
 - HTML5
@@ -26,74 +68,56 @@ CivicSentiment is a machine learning-powered web application that performs real-
 - JavaScript
 - Tailwind CSS
 
-### Backend
-- Python
-- FastAPI
-- Uvicorn
-
-### Machine Learning
-- Scikit-learn
-- Logistic Regression
-- Custom Text Vectorizer
-- NLTK
-- SciPy
-
 ---
 
 ## 📂 Project Structure
 
 ```
-CivicSentiment/
-│── api.py
-│── index.html
-│── style.css
-│── app.js
-│── requirements.txt
-│── mmodel_logistic_2.pkl
-│── vectorizer_for_m2.pkl
-│── run_api.ps1
-│── run_api.bat
-│── README.md
+CivicSentiment
+│
+├── Sentiment_Analysis.ipynb      # Model training notebook
+├── api.py                        # FastAPI backend
+├── app.js                        # Frontend logic
+├── index.html
+├── style.css
+├── requirements.txt
+├── mmodel_logistic_2.pkl         # Trained Logistic Regression model
+├── vectorizer_for_m2.pkl         # CountVectorizer
+├── run_api.ps1
+├── run_api.bat
+└── README.md
 ```
 
 ---
 
 ## ⚙️ Installation
 
-### 1. Clone Repository
+### Clone Repository
 
 ```bash
 git clone https://github.com/yourusername/CivicSentiment.git
 cd CivicSentiment
 ```
 
-### 2. Install Dependencies
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Start Backend
-
-Windows PowerShell
-
-```powershell
-.\run_api.ps1
-```
-
-or
+### Start Backend
 
 ```bash
 python api.py
 ```
 
-### 4. Start Frontend
+### Start Frontend
 
 ```bash
 python -m http.server 8000
 ```
 
-Open your browser and visit:
+Visit:
 
 ```
 http://localhost:8000
@@ -101,21 +125,15 @@ http://localhost:8000
 
 ---
 
-## 🚀 API Endpoint
+## 🚀 REST API
 
-### Analyze Sentiment
-
-**POST**
-
-```
-/api/analyze
-```
+### POST `/api/analyze`
 
 Request
 
 ```json
 {
-    "text": "I absolutely love this project!"
+  "text": "I love this project!"
 }
 ```
 
@@ -123,58 +141,58 @@ Response
 
 ```json
 {
-    "sentiment": "POSITIVE",
-    "confidence": 98.42,
-    "probabilities": {
-        "Positive": 98.42,
-        "Neutral": 1.13,
-        "Negative": 0.45,
-        "Irrelevant": 0.00
-    }
+  "sentiment": "POSITIVE",
+  "confidence": 98.42,
+  "probabilities": {
+    "Positive": 98.42,
+    "Neutral": 1.11,
+    "Negative": 0.47,
+    "Irrelevant": 0.00
+  }
 }
 ```
 
 ---
 
-## 📊 Model Information
+## 📈 Model
 
-- Algorithm: Logistic Regression
-- Text Vectorization: Custom Vectorizer
-- NLP Library: NLTK
-- Output Classes:
-  - Positive
-  - Negative
-  - Neutral
-  - Irrelevant
+**Algorithm:** Logistic Regression
 
----
+**Feature Extraction:**
 
-## ✨ Highlights
+- CountVectorizer
+- Bag of Words
+- N-Grams (1–4)
 
-- Responsive and modern UI
-- Fast API response
-- Interactive dashboard
-- Confidence visualization
-- Searchable sentiment history
-- CSV export support
-- Easy deployment and integration
+**Predicted Classes**
+
+- Positive
+- Negative
+- Neutral
+- Irrelevant
 
 ---
 
-## 📸 Preview
+## 📸 Screenshots
 
-Add screenshots of your application here.
+Add screenshots here.
 
 ```
-assets/dashboard.png
-assets/result.png
+images/home.png
+images/result.png
+images/history.png
 ```
 
 ---
 
-## 📄 License
+## 🔮 Future Improvements
 
-This project is licensed under the MIT License.
+- Deep Learning Models (LSTM/BERT)
+- Multi-language sentiment analysis
+- Docker support
+- Cloud deployment
+- User authentication
+- Batch prediction API
 
 ---
 
@@ -182,4 +200,4 @@ This project is licensed under the MIT License.
 
 **Yash Kumawat**
 
-If you like this project, consider giving it a ⭐ on GitHub.
+If you found this project helpful, consider giving it a ⭐ on GitHub.
