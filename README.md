@@ -175,13 +175,10 @@ Response
 
 ## 📸 Screenshots
 
-Add screenshots here.
-
-```
-images/home.png
-images/result.png
-images/history.png
-```
+<img width="1920" height="1020" alt="Screenshot 2026-07-29 150332" src="https://github.com/user-attachments/assets/3e747b8d-3baa-414b-a08e-d29e75429119" />
+Screenshot 1
+<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/52ec5a9c-05bf-40a5-b2ee-e2110861dedb" />
+Screenshot 2
 
 ---
 
