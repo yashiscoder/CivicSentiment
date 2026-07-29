@@ -1,0 +1,2 @@
+For backend: .\run_api.ps1
+For frontend: & "C:\Program Files\Python314\python.exe" -m http.server 8000
