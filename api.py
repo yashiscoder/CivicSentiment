@@ -2,8 +2,10 @@ import os
 import sys
 import pickle
 
-# Remove current working directory from sys.path to satisfy NLTK Python 3.14 security isolation
-sys.path = [p for p in sys.path if p not in ('', '.')]
+# Enable Python safe path mode & remove CWD from sys.path for NLTK Python 3.14 security checks
+os.environ["PYTHONSAFEPATH"] = "1"
+_cwd = os.path.abspath(os.getcwd())
+sys.path = [p for p in sys.path if p and os.path.abspath(p) != _cwd and p not in ('', '.')]
 
 import nltk
 import uvicorn
