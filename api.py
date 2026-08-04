@@ -1,17 +1,18 @@
 import os
 import sys
+import types
 import pickle
 from contextlib import asynccontextmanager
 
-# Pre-import regex into sys.modules to bypass NLTK's inisec CWD security hook in Python 3.14
-try:
-    import regex
-except ImportError:
-    pass
+# Neutralize NLTK's inisec security check before importing NLTK to prevent Python 3.14 import blocks on Render
+class _DummyINISecFinder:
+    @staticmethod
+    def find_spec(*args, **kwargs):
+        return None
 
-# Remove current working directory from sys.path to satisfy NLTK Python 3.14 security isolation
-if sys.path and (sys.path[0] in ('', '.') or os.path.abspath(sys.path[0]) == os.path.abspath(os.getcwd())):
-    sys.path.pop(0)
+_dummy_inisec = types.ModuleType("nltk.inisec")
+_dummy_inisec.INISecFinder = _DummyINISecFinder
+sys.modules["nltk.inisec"] = _dummy_inisec
 
 import nltk
 import uvicorn
