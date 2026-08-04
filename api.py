@@ -113,7 +113,7 @@ class AnalysisResponse(BaseModel):
     model_name: str
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "message": "CivicSentiment API is running.",
@@ -122,7 +122,7 @@ def root():
     }
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     return {
         "status": "healthy",
