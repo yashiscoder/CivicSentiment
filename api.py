@@ -1,6 +1,7 @@
 import os
 import sys
 import pickle
+from contextlib import asynccontextmanager
 
 # Pre-import regex into sys.modules to bypass NLTK's inisec CWD security hook in Python 3.14
 try:
@@ -8,7 +9,7 @@ try:
 except ImportError:
     pass
 
-# Remove current working directory from sys.path
+# Remove current working directory from sys.path to satisfy NLTK Python 3.14 security isolation
 if sys.path and (sys.path[0] in ('', '.') or os.path.abspath(sys.path[0]) == os.path.abspath(os.getcwd())):
     sys.path.pop(0)
 
@@ -27,22 +28,6 @@ for res in ["punkt_tab", "punkt", "stopwords"]:
     except Exception as e:
         print(f"Warning downloading NLTK resource {res}: {e}")
 
-# Initialize FastAPI App
-app = FastAPI(
-    title="Tweet Sentiment Analysis API",
-    description="REST API for custom machine learning sentiment analysis model (my_output.pkl)",
-    version="1.0.0"
-)
-
-# Enable CORS for frontend integration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Global variables for model and vectorizer
 MODEL = None
 VECTORIZER = None
@@ -53,10 +38,14 @@ VECTORIZER_FILE = "vectorizer_for_m2.pkl"
 
 
 def load_model_and_vectorizer():
-    global MODEL, VECTORIZER, MODEL_CLASSES, N_FEATURES
+    global MODEL, VECTORIZER, MODEL_CLASSES, N_FEATURES, MODEL_FILE, VECTORIZER_FILE
     
+    # Auto-detect available model file
     if not os.path.exists(MODEL_FILE):
-        raise FileNotFoundError(f"Model pickle file '{MODEL_FILE}' not found in current directory.")
+        if os.path.exists("my_output.pkl"):
+            MODEL_FILE = "my_output.pkl"
+        else:
+            raise FileNotFoundError(f"Model file '{MODEL_FILE}' not found in directory.")
     
     print(f"Loading model from '{MODEL_FILE}'...")
     with open(MODEL_FILE, "rb") as f:
@@ -72,9 +61,12 @@ def load_model_and_vectorizer():
         
     print(f"Model loaded successfully. Classes: {MODEL_CLASSES}, Features: {N_FEATURES}")
 
-    # Strict loading of custom vectorizer pickle file (No HashingVectorizer fallback)
+    # Auto-detect available vectorizer file
     if not os.path.exists(VECTORIZER_FILE):
-        raise FileNotFoundError(f"Vectorizer pickle file '{VECTORIZER_FILE}' not found in current directory.")
+        if os.path.exists("vectorizer.pkl"):
+            VECTORIZER_FILE = "vectorizer.pkl"
+        else:
+            raise FileNotFoundError(f"Vectorizer file '{VECTORIZER_FILE}' not found in directory.")
 
     print(f"Loading custom vectorizer from '{VECTORIZER_FILE}'...")
     with open(VECTORIZER_FILE, "rb") as f:
@@ -82,9 +74,29 @@ def load_model_and_vectorizer():
     print("Custom vectorizer loaded successfully.")
 
 
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Load ML Model & Vectorizer
     load_model_and_vectorizer()
+    yield
+
+
+# Initialize FastAPI App
+app = FastAPI(
+    title="CivicSentiment API",
+    description="REST API for custom machine learning sentiment analysis model",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Enable CORS for frontend integration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Request / Response Schemas
@@ -103,7 +115,7 @@ class AnalysisResponse(BaseModel):
 @app.get("/")
 def root():
     return {
-        "message": "Tweet Sentiment Analysis API is running.",
+        "message": "CivicSentiment API is running.",
         "docs_url": "/docs",
         "health_url": "/api/health"
     }
@@ -167,4 +179,5 @@ def analyze_sentiment(payload: TextPayload):
 
 
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="127.0.0.1", port=5000, reload=True)
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run("api:app", host="0.0.0.0", port=port)
