@@ -1,2 +1,6 @@
-For backend: .\run_api.ps1
-For frontend: & "C:\Program Files\Python314\python.exe" -m http.server 8000
+For backend local: .\run_api.ps1
+For frontend local: & "C:\Program Files\Python314\python.exe" -m http.server 8000
+
+For Render Cloud Deployment:
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn api:app --host 0.0.0.0 --port $PORT

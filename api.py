@@ -1,5 +1,10 @@
 import os
+import sys
 import pickle
+
+# Remove current working directory from sys.path to satisfy NLTK Python 3.14 security isolation
+sys.path = [p for p in sys.path if p not in ('', '.')]
+
 import nltk
 import uvicorn
 from fastapi import FastAPI, HTTPException
