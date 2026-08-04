@@ -2,10 +2,15 @@ import os
 import sys
 import pickle
 
-# Enable Python safe path mode & remove CWD from sys.path for NLTK Python 3.14 security checks
-os.environ["PYTHONSAFEPATH"] = "1"
-_cwd = os.path.abspath(os.getcwd())
-sys.path = [p for p in sys.path if p and os.path.abspath(p) != _cwd and p not in ('', '.')]
+# Pre-import regex into sys.modules to bypass NLTK's inisec CWD security hook in Python 3.14
+try:
+    import regex
+except ImportError:
+    pass
+
+# Remove current working directory from sys.path
+if sys.path and (sys.path[0] in ('', '.') or os.path.abspath(sys.path[0]) == os.path.abspath(os.getcwd())):
+    sys.path.pop(0)
 
 import nltk
 import uvicorn
