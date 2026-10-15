@@ -1,435 +1,272 @@
-/**
- * Tweet Sentiment Analyzer - Main Application Script
- * Strictly integrated with FastAPI Backend API (mmodel_logistic_2.pkl & vectorizer_for_m2.pkl)
- */
+/* CivicSentiment – app script */
+(() => {
+  'use strict';
 
-const API_ENDPOINT =
-"https://civicsentiment.onrender.com/api/analyze";
+  const BASE = 'https://civicsentiment.onrender.com/api';
+  const KEY = 'sentiment_app_history';
+  const PREF_KEY = 'sentiment_app_save';
+  const MAX_HISTORY = 100;
 
-const API_HEALTH_ENDPOINT =
-"https://civicsentiment.onrender.com/api/health";
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
 
-// Initial Seed Data for History
-const INITIAL_HISTORY = [
-    {
-        id: "hist-1",
-        text: "Absolutely love the new feature update! Super smooth workflow.",
-        sentiment: "POSITIVE",
-        confidence: 98.1,
-        timestamp: "2 mins ago",
-        rawTime: Date.now() - 2 * 60 * 1000
-    },
-    {
-        id: "hist-2",
-        text: "The login page is timing out again. Third time this week.",
-        sentiment: "NEGATIVE",
-        confidence: 87.4,
-        timestamp: "15 mins ago",
-        rawTime: Date.now() - 15 * 60 * 1000
-    },
-    {
-        id: "hist-3",
-        text: "Wondering if the API documentation has been updated for v2.",
-        sentiment: "NEUTRAL",
-        confidence: 92.0,
-        timestamp: "42 mins ago",
-        rawTime: Date.now() - 42 * 60 * 1000
-    }
-];
+  const input = $('tweet-input'), counter = $('char-counter');
+  const analyzeBtn = $('analyze-btn'), btnText = $('btn-text');
+  const card = $('result-card');
+  const tbody = $('history-tbody');
 
-// Application State
-let historyState = [];
-let currentFilter = "ALL";
-let currentSearch = "";
-let isApiConnected = false;
+  let history = [];
+  let filter = 'ALL';
+  let query = '';
+  let saveEnabled = true;
 
-// DOM Elements
-const tweetInput = document.getElementById('tweet-input');
-const charCounter = document.getElementById('char-counter');
-const analyzeBtn = document.getElementById('analyze-btn');
-const btnText = document.getElementById('btn-text');
-const btnIcon = document.getElementById('btn-icon');
-const clearBtn = document.getElementById('clear-btn');
-const engineStatusBadge = document.getElementById('engine-status-badge');
+  /* ---------- storage (guarded: private mode / quota can throw) ---------- */
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+  };
 
-// Result Card Elements
-const resultCard = document.getElementById('result-card');
-const sentimentBadge = document.getElementById('sentiment-badge');
-const badgeIcon = document.getElementById('badge-icon');
-const badgeText = document.getElementById('badge-text');
-const moodBgIcon = document.getElementById('mood-bg-icon');
-const confidenceVal = document.getElementById('confidence-score-val');
-const confidenceBar = document.getElementById('confidence-bar');
-const positiveScore = document.getElementById('positive-score');
-const positiveBar = document.getElementById('positive-bar');
-const neutralScore = document.getElementById('neutral-score');
-const neutralBar = document.getElementById('neutral-bar');
-const negativeScore = document.getElementById('negative-score');
-const negativeBar = document.getElementById('negative-bar');
-const wordCountBadge = document.getElementById('word-count-badge');
-
-// History Elements
-const historyTbody = document.getElementById('history-tbody');
-const historyFilter = document.getElementById('history-filter');
-const historySearch = document.getElementById('history-search');
-const clearHistoryBtn = document.getElementById('clear-history-btn');
-const exportCsvBtn = document.getElementById('export-csv-btn');
-
-// Navigation & Modals
-const navLinks = document.querySelectorAll('.nav-link');
-const modalApi = document.getElementById('modal-api');
-const modalSettings = document.getElementById('modal-settings');
-const closeModalBtns = document.querySelectorAll('.close-modal');
-
-// --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
-    loadHistory();
-    setupEventListeners();
-    updateCharCounter();
-    checkApiHealth();
-});
-
-// Check if Python FastAPI server is running
-async function checkApiHealth() {
+  function loadHistory() {
+    saveEnabled = store.get(PREF_KEY) !== '0';
+    $('opt-save').checked = saveEnabled;
     try {
-        const res = await fetch(API_HEALTH_ENDPOINT, { signal: AbortSignal.timeout(2000) });
-        if (res.ok) {
-            const data = await res.json();
-            isApiConnected = true;
-            const modelName = data.model || "Pickle Model";
-            if (engineStatusBadge) {
-                engineStatusBadge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-[#30D158] animate-pulse shadow-sm shadow-[#30D158]"></span> <span class="text-slate-300">API: <strong class="text-[#30D158] font-medium">Connected (${modelName})</strong></span>`;
-            }
-            console.log("FastAPI backend connected:", data);
-        } else {
-            setDisconnectedStatus();
-        }
-    } catch (e) {
-        setDisconnectedStatus();
-    }
-}
+      const parsed = JSON.parse(store.get(KEY) || '[]');
+      // drop the old fake seed rows from earlier versions
+      history = Array.isArray(parsed) ? parsed.filter((h) => !/^hist-[123]$/.test(h.id)) : [];
+    } catch { history = []; }
+  }
+  function saveHistory() { if (saveEnabled) store.set(KEY, JSON.stringify(history)); }
 
-function setDisconnectedStatus() {
-    isApiConnected = false;
-    if (engineStatusBadge) {
-        engineStatusBadge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-[#FF453A] animate-pulse shadow-sm shadow-[#FF453A]"></span> <span class="text-slate-300">API: <strong class="text-[#FF453A] font-medium">Disconnected (Start Server)</strong></span>`;
-    }
-}
+  /* ---------- helpers ---------- */
+  const norm = (s) => /POS/i.test(s) ? 'POSITIVE' : /NEG/i.test(s) ? 'NEGATIVE' : 'NEUTRAL';
+  const toneOf = (s) => ({ POSITIVE: 'pos', NEGATIVE: 'neg', NEUTRAL: 'neu' }[norm(s)]);
+  const LABEL = { POSITIVE: 'Positive', NEGATIVE: 'Negative', NEUTRAL: 'Neutral' };
 
-// Load history
-function loadHistory() {
-    const saved = localStorage.getItem('sentiment_app_history');
-    if (saved) {
+  function ago(ts) {
+    const s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 45) return 'Just now';
+    if (s < 3600) return `${Math.round(s / 60)} min ago`;
+    if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+    return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  let toastTimer;
+  function toast(msg, type = 'info') {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (type === 'warn' ? ' warn' : '');
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+  }
+
+  async function api(path, options = {}, ms = 20000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try { return await fetch(BASE + path, { ...options, signal: ctrl.signal }); }
+    finally { clearTimeout(timer); }
+  }
+
+  /* ---------- server status (handles Render cold starts) ---------- */
+  function setStatus(state, text) {
+    $('status').dataset.state = state;
+    $('status-text').textContent = text;
+  }
+
+  let checking = false;
+  async function checkHealth() {
+    if (checking) return false;
+    checking = true;
+    setStatus('wait', 'Waking up server… this can take up to a minute');
+    try {
+      for (let i = 0; i < 3; i++) {
         try {
-            historyState = JSON.parse(saved);
-        } catch (e) {
-            historyState = [...INITIAL_HISTORY];
-        }
-    } else {
-        historyState = [...INITIAL_HISTORY];
-        saveHistory();
-    }
-    renderHistory();
-}
+          const res = await api('/health', {}, 25000);
+          if (res.ok) {
+            const d = await res.json().catch(() => ({}));
+            setStatus('ok', `Connected${d.model ? ` · ${d.model}` : ''}`);
+            return true;
+          }
+        } catch { /* retry */ }
+      }
+      setStatus('err', 'Server unreachable · click to retry');
+      return false;
+    } finally { checking = false; }
+  }
 
-function saveHistory() {
-    localStorage.setItem('sentiment_app_history', JSON.stringify(historyState));
-}
+  /* ---------- analyze ---------- */
+  function updateCounter() {
+    const n = input.value.length;
+    counter.textContent = `${n} / ${input.maxLength}`;
+    counter.classList.toggle('warn', n > input.maxLength * 0.9);
+  }
 
-// Event Listeners
-function setupEventListeners() {
-    tweetInput.addEventListener('input', updateCharCounter);
-    analyzeBtn.addEventListener('click', handleAnalyze);
+  function setBusy(busy) {
+    analyzeBtn.disabled = busy;
+    analyzeBtn.setAttribute('aria-busy', busy);
+    btnText.textContent = busy ? 'Analyzing' : 'Analyze sentiment';
+  }
 
-    clearBtn.addEventListener('click', () => {
-        tweetInput.value = '';
-        updateCharCounter();
-        tweetInput.focus();
-    });
-
-    historySearch.addEventListener('input', (e) => {
-        currentSearch = e.target.value.toLowerCase().trim();
-        renderHistory();
-    });
-
-    historyFilter.addEventListener('change', (e) => {
-        currentFilter = e.target.value;
-        renderHistory();
-    });
-
-    clearHistoryBtn.addEventListener('click', () => {
-        if (confirm('Clear all analysis history?')) {
-            historyState = [];
-            saveHistory();
-            renderHistory();
-            showNotification('Analysis history cleared.');
-        }
-    });
-
-    exportCsvBtn.addEventListener('click', exportToCSV);
-
-    navLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const tab = link.getAttribute('data-tab');
-
-            if (tab === 'api') {
-                modalApi.classList.remove('hidden');
-            } else if (tab === 'settings') {
-                modalSettings.classList.remove('hidden');
-            } else if (tab === 'history') {
-                const historySec = document.getElementById('history-section');
-                if (historySec) {
-                    historySec.scrollIntoView({ behavior: 'smooth' });
-                }
-            } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-
-            // Highlight active navbar tab
-            navLinks.forEach(l => {
-                l.className = "nav-link font-label-md text-label-md text-slate-400 hover:text-white transition-all flex items-center gap-1.5 font-medium";
-            });
-            link.className = "nav-link font-label-md text-label-md text-[#0A84FF] border-b-2 border-[#0A84FF] pb-1 transition-all flex items-center gap-1.5 font-medium";
-        });
-    });
-
-    closeModalBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            modalApi.classList.add('hidden');
-            modalSettings.classList.add('hidden');
-        });
-    });
-
-    [modalApi, modalSettings].forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.add('hidden');
-            }
-        });
-    });
-
-    document.getElementById('btn-notifications').addEventListener('click', () => {
-        checkApiHealth();
-        showNotification(isApiConnected ? 'Backend API is active.' : 'API disconnected. Please start the server.', isApiConnected ? 'info' : 'warning');
-    });
-}
-
-window.setText = function(text) {
-    tweetInput.value = text;
-    updateCharCounter();
-    tweetInput.focus();
-};
-
-function updateCharCounter() {
-    const len = tweetInput.value.length;
-    charCounter.textContent = `${len} / 280`;
-    if (len > 280) {
-        charCounter.classList.add('text-tertiary-container', 'font-bold');
-    } else {
-        charCounter.classList.remove('text-tertiary-container', 'font-bold');
-    }
-}
-
-// Analyze Handler with API Call (Strict Pickle Model)
-async function handleAnalyze() {
-    const text = tweetInput.value.trim();
-    if (!text) {
-        showNotification('Please enter text to analyze.', 'warning');
-        return;
-    }
-
-    // Loading UI state
-    analyzeBtn.disabled = true;
-    analyzeBtn.classList.add('opacity-80', 'cursor-not-allowed');
-    btnText.textContent = 'Analyzing...';
-    btnIcon.textContent = 'progress_activity';
-    btnIcon.classList.add('loading-spinner');
+  async function analyze() {
+    const text = input.value.trim();
+    if (!text) { toast('Enter some text to analyze first.', 'warn'); input.focus(); return; }
+    if (analyzeBtn.disabled) return;
+    setBusy(true);
 
     try {
-        // Call Python FastAPI backend (Pickle Model)
-        const response = await fetch(API_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-            signal: AbortSignal.timeout(5000)
-        });
+      // generous timeout: a sleeping free-tier server needs time to boot
+      const res = await api('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      }, 60000);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(typeof err.detail === 'string' ? err.detail : `Server error (${res.status})`);
+      }
+      const d = await res.json();
+      const p = d.probabilities || {};
+      const sentiment = norm(String(d.sentiment || ''));
 
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.detail || `API error (${response.status})`);
-        }
+      showResult({
+        sentiment,
+        confidence: Number(d.confidence) || 0,
+        pos: p.Positive || 0,
+        neu: (p.Neutral || 0) + (p.Irrelevant || 0),
+        neg: p.Negative || 0,
+        words: d.word_count ?? text.split(/\s+/).length,
+      });
 
-        const data = await response.json();
-        isApiConnected = true;
-        
-        const probs = data.probabilities || {};
-        const posP = probs["Positive"] || 0;
-        const negP = probs["Negative"] || 0;
-        const neuP = (probs["Neutral"] || 0) + (probs["Irrelevant"] || 0);
+      history.unshift({ id: `h-${Date.now()}`, text, sentiment, confidence: Number(d.confidence) || 0, rawTime: Date.now(), fresh: true });
+      history = history.slice(0, MAX_HISTORY);
+      saveHistory();
+      renderHistory();
+      setStatus('ok', `Connected${d.model_name ? ` · ${d.model_name}` : ''}`);
+    } catch (e) {
+      const msg = e.name === 'AbortError'
+        ? 'The server took too long to answer. It may still be waking up, so try again in a few seconds.'
+        : (e.message || 'Could not reach the server.');
+      setStatus('err', 'Server unreachable · click to retry');
+      toast(msg, 'warn');
+    } finally { setBusy(false); }
+  }
 
-        const result = {
-            sentiment: data.sentiment.toUpperCase(),
-            confidence: data.confidence,
-            posPercent: posP,
-            neuPercent: neuP,
-            negPercent: negP,
-            wordCount: data.word_count,
-            modelName: data.model_name
-        };
-
-        updateResultCard(result);
-
-        // Normalize sentiment for history tag
-        let histSent = "NEUTRAL";
-        if (result.sentiment.includes("POS")) histSent = "POSITIVE";
-        else if (result.sentiment.includes("NEG")) histSent = "NEGATIVE";
-
-        const newHistoryItem = {
-            id: `hist-${Date.now()}`,
-            text: text,
-            sentiment: histSent,
-            confidence: result.confidence,
-            timestamp: 'Just now',
-            rawTime: Date.now()
-        };
-
-        historyState.unshift(newHistoryItem);
-        saveHistory();
-        renderHistory();
-
-        showNotification(`Analysis complete using ${result.modelName || 'pickle model'}`);
-    } catch (err) {
-        console.error("API error:", err);
-        setDisconnectedStatus();
-        showNotification(`API Error: ${err.message}. Make sure backend server is running.`, 'warning');
-    } finally {
-        // Restore button state
-        analyzeBtn.disabled = false;
-        analyzeBtn.classList.remove('opacity-80', 'cursor-not-allowed');
-        btnText.textContent = 'Analyze Sentiment';
-        btnIcon.textContent = 'analytics';
-        btnIcon.classList.remove('loading-spinner');
+  function showResult({ sentiment, confidence, pos, neu, neg, words }) {
+    card.dataset.tone = toneOf(sentiment);
+    $('sentiment-badge').textContent = LABEL[sentiment];
+    $('confidence-score-val').textContent = `${confidence.toFixed(1)}%`;
+    $('confidence-bar').style.width = `${Math.max(confidence, 3)}%`;
+    for (const [id, v] of [['positive', pos], ['neutral', neu], ['negative', neg]]) {
+      $(`${id}-score`).textContent = `${v.toFixed(1)}%`;
+      $(`${id}-bar`).style.width = `${v}%`;
     }
-}
+    $('word-count-badge').textContent = `${words} word${words === 1 ? '' : 's'}`;
+  }
 
-// Update Result Card UI
-function updateResultCard(result) {
-    const { sentiment, confidence, posPercent, neuPercent, negPercent, wordCount } = result;
+  /* ---------- history ---------- */
+  function renderHistory() {
+    const rows = history.filter((h) =>
+      (filter === 'ALL' || h.sentiment === filter) &&
+      (!query || h.text.toLowerCase().includes(query)));
 
-    wordCountBadge.textContent = `${wordCount} word${wordCount === 1 ? '' : 's'}`;
+    tbody.replaceChildren();
+    $('export-csv-btn').disabled = $('clear-history-btn').disabled = history.length === 0;
+    $('hist-count').textContent = history.length
+      ? `${rows.length} of ${history.length} saved ${history.length === 1 ? 'analysis' : 'analyses'}${saveEnabled ? ' · stored in this browser only' : ''}`
+      : 'Your analyses are saved in this browser only.';
 
-    confidenceVal.textContent = `${confidence.toFixed(1)}%`;
-    confidenceBar.style.width = `${Math.max(confidence, 5)}%`;
-
-    positiveScore.textContent = `${posPercent.toFixed(1)}%`;
-    positiveBar.style.width = `${posPercent}%`;
-
-    neutralScore.textContent = `${neuPercent.toFixed(1)}%`;
-    neutralBar.style.width = `${neuPercent}%`;
-
-    negativeScore.textContent = `${negPercent.toFixed(1)}%`;
-    negativeBar.style.width = `${negPercent}%`;
-
-    if (sentiment.includes("POS")) {
-        badgeText.textContent = "Positive";
-        badgeIcon.textContent = "sentiment_very_satisfied";
-        moodBgIcon.textContent = "mood";
-        moodBgIcon.className = "material-symbols-outlined text-[150px] text-[#30D158]/20";
-        sentimentBadge.className = "px-md py-xs bg-[#30D158]/15 text-[#30D158] border border-[#30D158]/30 rounded-full flex items-center gap-xs font-label-md text-label-md font-semibold backdrop-blur-md transition-all shadow-lg shadow-[#30D158]/10";
-        confidenceBar.className = "bg-gradient-to-r from-emerald-500 to-[#30D158] h-full rounded-full transition-all duration-700 ease-out shadow-[0_0_15px_rgba(48,209,88,0.5)]";
-        confidenceVal.className = "font-headline-md text-2xl font-bold text-[#30D158]";
-    } else if (sentiment.includes("NEG")) {
-        badgeText.textContent = "Negative";
-        badgeIcon.textContent = "sentiment_very_dissatisfied";
-        moodBgIcon.textContent = "mood_bad";
-        moodBgIcon.className = "material-symbols-outlined text-[150px] text-[#FF453A]/20";
-        sentimentBadge.className = "px-md py-xs bg-[#FF453A]/15 text-[#FF453A] border border-[#FF453A]/30 rounded-full flex items-center gap-xs font-label-md text-label-md font-semibold backdrop-blur-md transition-all shadow-lg shadow-[#FF453A]/10";
-        confidenceBar.className = "bg-gradient-to-r from-rose-500 to-[#FF453A] h-full rounded-full transition-all duration-700 ease-out shadow-[0_0_15px_rgba(255,69,58,0.5)]";
-        confidenceVal.className = "font-headline-md text-2xl font-bold text-[#FF453A]";
-    } else {
-        badgeText.textContent = sentiment === "IRRELEVANT" ? "Irrelevant" : "Neutral";
-        badgeIcon.textContent = "sentiment_neutral";
-        moodBgIcon.textContent = "sentiment_neutral";
-        moodBgIcon.className = "material-symbols-outlined text-[150px] text-slate-500/20";
-        sentimentBadge.className = "px-md py-xs bg-white/10 text-slate-200 border border-white/15 rounded-full flex items-center gap-xs font-label-md text-label-md font-semibold backdrop-blur-md transition-all shadow-lg";
-        confidenceBar.className = "bg-gradient-to-r from-blue-500 to-[#0A84FF] h-full rounded-full transition-all duration-700 ease-out shadow-[0_0_15px_rgba(10,132,255,0.5)]";
-        confidenceVal.className = "font-headline-md text-2xl font-bold text-[#0A84FF]";
-    }
-}
-
-// Render History
-function renderHistory() {
-    historyTbody.innerHTML = '';
-
-    const filtered = historyState.filter(item => {
-        const matchesFilter = (currentFilter === "ALL") || (item.sentiment === currentFilter);
-        const matchesSearch = !currentSearch || item.text.toLowerCase().includes(currentSearch);
-        return matchesFilter && matchesSearch;
-    });
-
-    if (filtered.length === 0) {
-        historyTbody.innerHTML = `<tr><td colspan="4" class="px-lg py-xl text-center text-slate-400 italic">No matching records.</td></tr>`;
-        return;
+    if (!rows.length) {
+      const td = el('td', 'empty', history.length ? 'No results match your search or filter.' : 'Nothing here yet. Analyze some text and it will show up here.');
+      td.colSpan = 4;
+      tbody.append(el('tr')).append(td);
+      return;
     }
 
-    filtered.forEach(item => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-white/5 transition-colors animate-fade-in-row border-b border-white/5";
+    const frag = document.createDocumentFragment();
+    for (const h of rows) {
+      const tr = el('tr', h.fresh ? 'new' : '');
+      delete h.fresh;
+      const txt = el('td', 'txt', h.text);
+      txt.title = h.text;
+      const tag = el('span', `tag ${toneOf(h.sentiment)}`, LABEL[norm(h.sentiment)]);
+      const sent = el('td'); sent.append(tag);
+      const t = el('td', 'time', ago(h.rawTime || Date.now()));
+      tr.append(txt, sent, el('td', '', `${Number(h.confidence).toFixed(1)}%`), t);
+      frag.append(tr);
+    }
+    tbody.append(frag);
+  }
 
-        let badgeMarkup = `<span class="px-3 py-1 bg-white/10 text-slate-300 border border-white/15 rounded-full text-label-sm font-label-sm font-semibold">Neutral</span>`;
-        if (item.sentiment === "POSITIVE") {
-            badgeMarkup = `<span class="px-3 py-1 bg-[#30D158]/15 text-[#30D158] border border-[#30D158]/30 rounded-full text-label-sm font-label-sm font-semibold">Positive</span>`;
-        } else if (item.sentiment === "NEGATIVE") {
-            badgeMarkup = `<span class="px-3 py-1 bg-[#FF453A]/15 text-[#FF453A] border border-[#FF453A]/30 rounded-full text-label-sm font-label-sm font-semibold">Negative</span>`;
-        }
+  function exportCSV() {
+    // prefix risky leading characters so spreadsheets don't run them as formulas
+    const cell = (v) => `"${String(/^[=+\-@\t\r]/.test(v) ? "'" + v : v).replace(/"/g, '""')}"`;
+    const lines = ['Text,Sentiment,Confidence (%),Time'];
+    for (const h of history) {
+      lines.push([cell(h.text), h.sentiment, Number(h.confidence).toFixed(1), new Date(h.rawTime).toISOString()].join(','));
+    }
+    const url = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+    const a = el('a'); a.href = url; a.download = `sentiment_history_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
-        tr.innerHTML = `
-            <td class="px-lg py-lg font-body-md text-body-md max-w-md truncate text-slate-200" title="${escapeHtml(item.text)}">
-                "${escapeHtml(item.text)}"
-            </td>
-            <td class="px-lg py-lg">${badgeMarkup}</td>
-            <td class="px-lg py-lg font-label-md text-label-md font-semibold text-[#0A84FF]">${item.confidence.toFixed(1)}%</td>
-            <td class="px-lg py-lg font-label-sm text-label-sm text-slate-400 text-right">${item.timestamp}</td>
-        `;
+  /* ---------- wiring ---------- */
+  function init() {
+    loadHistory();
+    renderHistory();
+    updateCounter();
 
-        historyTbody.appendChild(tr);
+    input.addEventListener('input', updateCounter);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) analyze(); });
+    analyzeBtn.addEventListener('click', analyze);
+    $('clear-btn').addEventListener('click', () => { input.value = ''; updateCounter(); input.focus(); });
+    $('status').addEventListener('click', checkHealth);
+
+    document.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+      input.value = c.dataset.text; updateCounter(); input.focus();
+    }));
+
+    let searchTimer;
+    $('history-search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { query = e.target.value.toLowerCase().trim(); renderHistory(); }, 150);
     });
-}
-
-function escapeHtml(str) {
-    return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
-}
-
-function exportToCSV() {
-    if (historyState.length === 0) return;
-    let csv = "data:text/csv;charset=utf-8,ID,Tweet Content,Sentiment,Confidence (%),Timestamp\n";
-    historyState.forEach(row => {
-        csv += `${row.id},"${row.text.replace(/"/g, '""')}",${row.sentiment},${row.confidence},"${row.timestamp}"\n`;
+    $('history-filter').addEventListener('change', (e) => { filter = e.target.value; renderHistory(); });
+    $('export-csv-btn').addEventListener('click', exportCSV);
+    $('clear-history-btn').addEventListener('click', () => {
+      if (!confirm('Delete all saved analyses? This cannot be undone.')) return;
+      history = []; saveHistory(); store.set(KEY, '[]'); renderHistory(); toast('History cleared.');
     });
-    const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csv));
-    link.setAttribute("download", `sentiment_history_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
 
-function showNotification(message, type = 'info') {
-    const existing = document.getElementById('toast-notification');
-    if (existing) existing.remove();
+    // dialogs (native <dialog>: Esc, focus trap and focus return come for free)
+    document.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => $(b.dataset.open).showModal()));
+    document.querySelectorAll('dialog').forEach((d) => {
+      d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+    });
+    $('opt-save').addEventListener('change', (e) => {
+      saveEnabled = e.target.checked;
+      store.set(PREF_KEY, saveEnabled ? '1' : '0');
+      if (saveEnabled) saveHistory(); else store.set(KEY, '[]');
+      renderHistory();
+    });
 
-    const toast = document.createElement('div');
-    toast.id = 'toast-notification';
-    let bgClass = type === 'warning' ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-secondary-container text-on-secondary-container';
-    let icon = type === 'warning' ? 'warning' : 'check_circle';
+    // highlight "History" in the nav while it is on screen
+    const navA = $('nav-analyze'), navH = $('nav-history');
+    new IntersectionObserver(([entry]) => {
+      navH.toggleAttribute('aria-current', entry.isIntersecting);
+      navA.toggleAttribute('aria-current', !entry.isIntersecting);
+    }, { rootMargin: '-45% 0px -45% 0px' }).observe($('history'));
 
-    toast.className = `fixed bottom-lg right-lg ${bgClass} px-lg py-md rounded-lg shadow-2xl font-label-md z-[100] transform transition-all duration-300 translate-y-0 opacity-100 flex items-center gap-sm border border-outline-variant/30`;
-    toast.innerHTML = `<span class="material-symbols-outlined">${icon}</span> ${escapeHtml(message)}`;
-    document.body.appendChild(toast);
+    // keep "x min ago" fresh
+    setInterval(() => { if (!document.hidden) renderHistory(); }, 60000);
 
-    setTimeout(() => {
-        toast.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => toast.remove(), 300);
-    }, 2800);
-}
+    checkHealth();
+  }
+
+  init();
+})();
