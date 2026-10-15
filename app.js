@@ -183,7 +183,9 @@
     if (!rows.length) {
       const td = el('td', 'empty', history.length ? 'No results match your search or filter.' : 'Nothing here yet. Analyze some text and it will show up here.');
       td.colSpan = 4;
-      tbody.append(el('tr')).append(td);
+      const tr = el('tr');
+      tr.append(td);
+      tbody.append(tr);
       return;
     }
 
